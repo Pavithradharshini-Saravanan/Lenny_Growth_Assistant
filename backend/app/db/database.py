@@ -21,6 +21,18 @@ def get_db():
     finally:
         db.close()
 
-def init_db():
+def init_db(max_retries: int = 5, retry_interval: float = 2.0):
+    import time
+    import logging
+    logger = logging.getLogger(__name__)
     from backend.app.db import models  # noqa
-    Base.metadata.create_all(bind=engine)
+    for attempt in range(1, max_retries + 1):
+        try:
+            Base.metadata.create_all(bind=engine)
+            return
+        except Exception as e:
+            if attempt == max_retries:
+                logger.error(f"Failed to initialize database after {max_retries} attempts: {e}")
+                raise
+            logger.warning(f"Database connection attempt {attempt}/{max_retries} failed ({e}). Retrying in {retry_interval}s...")
+            time.sleep(retry_interval)

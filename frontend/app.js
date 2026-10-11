@@ -2,6 +2,7 @@
 const API_BASE = '/api';
 let currentSessionId = null;
 let currentProvider = 'ollama';
+let sessionsCache = [];
 
 document.addEventListener('DOMContentLoaded', async () => {
     await initApp();
@@ -10,7 +11,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function initApp() {
     await checkConfig();
-    await checkHealth();
+    await updateProviderStatus();
     await loadSessions();
 }
 
@@ -20,29 +21,45 @@ async function checkConfig() {
         if (res.ok) {
             const data = await res.json();
             currentProvider = data.active_provider;
-            document.getElementById('providerSelect').value = currentProvider;
+            const selectEl = document.getElementById('providerSelect');
+            if (selectEl) selectEl.value = currentProvider;
         }
     } catch (e) {
         console.error('Config fetch failed:', e);
     }
 }
 
-async function checkHealth() {
+async function updateProviderStatus() {
+    const badge = document.getElementById('providerStatusBadge');
+    if (!badge) return;
+
     try {
-        const res = await fetch(`${API_BASE}/health`);
-        const badge = document.getElementById('providerStatusBadge');
-        if (res.ok) {
-            const data = await res.json();
-            if (data.status === 'ok') {
-                badge.textContent = 'Healthy';
-                badge.className = 'status-badge badge-active';
-            } else {
-                badge.textContent = 'Degraded';
-                badge.className = 'status-badge badge-error';
+        if (currentProvider === 'cloud') {
+            const res = await fetch(`${API_BASE}/config`);
+            if (res.ok) {
+                const cfg = await res.json();
+                if (cfg.cloud_key_configured) {
+                    badge.textContent = 'Configured';
+                    badge.className = 'status-badge badge-active';
+                } else {
+                    badge.textContent = 'Key Missing';
+                    badge.className = 'status-badge badge-warning';
+                }
+            }
+        } else {
+            const res = await fetch(`${API_BASE}/health`);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.ollama) {
+                    badge.textContent = 'Connected';
+                    badge.className = 'status-badge badge-active';
+                } else {
+                    badge.textContent = 'Offline';
+                    badge.className = 'status-badge badge-error';
+                }
             }
         }
     } catch (e) {
-        const badge = document.getElementById('providerStatusBadge');
         badge.textContent = 'Offline';
         badge.className = 'status-badge badge-error';
     }
@@ -52,16 +69,27 @@ function setupEventListeners() {
     document.getElementById('btnNewChat').addEventListener('click', createNewSession);
     document.getElementById('providerSelect').addEventListener('change', handleProviderChange);
     document.getElementById('chatForm').addEventListener('submit', handleChatSubmit);
+
+    // Keyboard handling: Enter to send, Shift+Enter for new line
+    const userInput = document.getElementById('userInput');
+    userInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            if (!isSubmitting && userInput.value.trim().length > 0) {
+                document.getElementById('chatForm').dispatchEvent(new Event('submit', { cancelable: true }));
+            }
+        }
+    });
 }
 
 async function loadSessions() {
     try {
         const res = await fetch(`${API_BASE}/sessions`);
         if (res.ok) {
-            const sessions = await res.json();
-            renderSessionList(sessions);
-            if (sessions.length > 0 && !currentSessionId) {
-                switchSession(sessions[0].id);
+            sessionsCache = await res.json();
+            renderSessionList(sessionsCache);
+            if (sessionsCache.length > 0 && !currentSessionId) {
+                switchSession(sessionsCache[0].id);
             }
         }
     } catch (e) {
@@ -105,6 +133,16 @@ async function createNewSession() {
 
 async function switchSession(sessionId) {
     currentSessionId = sessionId;
+
+    // Sync provider selector to the selected session's stored provider
+    const sess = sessionsCache.find(s => s.id === sessionId);
+    if (sess && sess.provider) {
+        currentProvider = sess.provider;
+        const selectEl = document.getElementById('providerSelect');
+        if (selectEl) selectEl.value = currentProvider;
+    }
+    await updateProviderStatus();
+
     await loadSessions(); // Update active highlights
 
     // Clear chat messages container
@@ -151,9 +189,25 @@ async function deleteSession(event, sessionId) {
     }
 }
 
-function handleProviderChange(e) {
+async function handleProviderChange(e) {
     currentProvider = e.target.value;
     hideAlert();
+    await updateProviderStatus();
+
+    // Persist provider change to active session if one exists
+    if (currentSessionId) {
+        try {
+            await fetch(`${API_BASE}/sessions/${currentSessionId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ provider: currentProvider })
+            });
+            const cached = sessionsCache.find(s => s.id === currentSessionId);
+            if (cached) cached.provider = currentProvider;
+        } catch (err) {
+            console.error('Failed to persist provider update to session:', err);
+        }
+    }
 }
 
 let isSubmitting = false;

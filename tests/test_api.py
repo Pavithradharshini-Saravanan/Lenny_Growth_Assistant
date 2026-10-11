@@ -194,3 +194,39 @@ def test_existing_session_repeated_questions(client, monkeypatch):
     messages = client.get(f"/api/sessions/{session_id}/messages").json()
     assert len(messages) == 4
     assert [m["role"] for m in messages] == ["user", "assistant", "user", "assistant"]
+
+def test_session_provider_update_and_persistence(client):
+    # 1. Create session with 'ollama'
+    s_res = client.post("/api/sessions", json={"title": "Provider Switching Test", "provider": "ollama"}).json()
+    session_id = s_res["id"]
+    assert s_res["provider"] == "ollama"
+
+    # 2. Update session provider to 'cloud'
+    patch_res = client.patch(f"/api/sessions/{session_id}", json={"provider": "cloud"})
+    assert patch_res.status_code == 200
+    assert patch_res.json()["provider"] == "cloud"
+
+    # 3. Retrieve session and confirm provider is persisted as 'cloud'
+    get_res = client.get(f"/api/sessions/{session_id}").json()
+    assert get_res["provider"] == "cloud"
+
+def test_frontend_assets_contain_keyboard_listener_and_theme():
+    import os
+    app_js = open("frontend/app.js", encoding="utf-8").read()
+    styles_css = open("frontend/styles.css", encoding="utf-8").read()
+    index_html = open("frontend/index.html", encoding="utf-8").read()
+
+    # Verify Enter-to-send keydown listener
+    assert "e.key === 'Enter'" in app_js
+    assert "!e.shiftKey" in app_js
+    assert "e.preventDefault()" in app_js
+    assert "isSubmitting" in app_js
+
+    # Verify session provider sync in app.js
+    assert "sessionsCache" in app_js
+    assert "updateProviderStatus" in app_js
+
+    # Verify red-and-black product theme tokens in styles.css
+    assert "--bg-canvas: #090A0E" in styles_css
+    assert "--accent-red-primary: #DC2626" in styles_css
+    assert "prefers-reduced-motion" in styles_css

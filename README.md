@@ -62,7 +62,7 @@ The Lenny Growth Assistant addresses high-friction product strategy queries by c
 
 - **Backend:** FastAPI (Python 3.11+ / 3.13), SQLAlchemy 2.0 ORM, Pydantic v2, Uvicorn.
 - **Frontend:** Responsive vanilla HTML5/CSS/JavaScript with zero build step dependencies.
-- **Database:** SQLite default (`lenny_growth_assistant.db`) for instant local startup; PostgreSQL 16 ready via Docker Compose.
+- **Database:** Full SQLAlchemy dual-support: **PostgreSQL 16** (assignment specification, pre-wired in `docker-compose.yml` and connectable via Supabase/Railway) and **SQLite** default for zero-setup local execution.
 - **Retrieval Engine:** Custom BM25 TF-IDF RAG engine with speaker/timestamp chunking and cross-episode disambiguation.
 
 ---
@@ -117,10 +117,18 @@ ANTHROPIC_API_KEY=
 ```
 
 ### Step 2: Start the Application Server
+
+**Option A — Local Python (SQLite or configured PostgreSQL):**
 ```bash
 python run.py
 ```
-*The server will start on `http://localhost:8000` with hot-reload enabled.*
+*The server starts on `http://localhost:8000` with hot-reload enabled.*
+
+**Option B — Docker Compose (PostgreSQL 16 + FastAPI):**
+```bash
+docker compose up --build
+```
+*This starts a containerized PostgreSQL 16 instance (`lenny-postgres`) and the FastAPI backend (`lenny-backend`).*
 
 ### Step 3: Open the Web Application
 Navigate to `http://localhost:8000` in any modern web browser.
@@ -213,16 +221,16 @@ Treating all generated HTML as untrusted code is a mandatory security invariant:
 
 ## 9. Automated Testing & Verification
 
-The project includes 48 comprehensive automated tests covering unit, integration, and regression requirements:
+The project includes 50 comprehensive automated tests covering unit, integration, and regression requirements:
 
 ```bash
 # Run the full test suite
 python -m pytest tests/ -v
 ```
 
-### Test Breakdown (48/48 Passed):
+### Test Breakdown (50/50 Passed):
 - `tests/test_agent.py` (5 tests): Provider dispatcher, missing key validation, HTTP 400 non-fallback check, Ollama tool calling and regex regression.
-- `tests/test_api.py` (8 tests): Health check, config endpoint, session lifecycle, session isolation, title auto-generation, orphan message rollback, multi-turn history.
+- `tests/test_api.py` (10 tests): Health check, config endpoint, session lifecycle, session isolation, title auto-generation, orphan message rollback, multi-turn history, repeated questions, provider sync persistence, and frontend theme/shortcut verification.
 - `tests/test_artifacts.py` (5 tests): Markdown artifact domain, HTML sanitization, invalid type rejection, persistence API, iframe sandbox policy.
 - `tests/test_grounding_regression.py` (12 tests): Grounded retrieval for Brian Chesky, Shreyas Doshi, Marty Cagan, Elena Verna; 4 paraphrased queries; out-of-corpus handling; session turn lifecycle; refresh consistency; timeout rollback.
 - `tests/test_ingestion.py` (5 tests): Frontmatter parsing, semantic chunking, database persistence, deduplication, end-to-end ingestion and retrieval.
@@ -251,7 +259,7 @@ In accordance with [docs/PROJECT_RULES.md](docs/PROJECT_RULES.md), the system im
 - **No Keyword Routers:** Does not map user question strings or keywords to fixed responses.
 - **No Canned Answers or Fake Citations:** Every response and source citation is dynamically retrieved and synthesized from SQLite/PostgreSQL chunks.
 - **Dynamic Skill Synthesis:** The Ship 30 skill synthesizes any arbitrary topic or guest dynamically based on query parameters and retrieved evidence.
-- **Audit Checklist:** Verified against [docs/checklists/ANTI_HARDCODING_AUDIT.md](docs/checklists/ANTI_HARDCODING_AUDIT.md).
+- **Rigorously Audited:** Verified against strict project rules documented in [docs/PROJECT_RULES.md](docs/PROJECT_RULES.md).
 
 ---
 
@@ -270,7 +278,7 @@ In accordance with [docs/PROJECT_RULES.md](docs/PROJECT_RULES.md), the system im
 - [x] **Ship 30 for 30 Skill:** Dedicated ~1,250-word structured writing skill grounded in real transcript evidence.
 - [x] **Sandboxed Artifact Viewer:** Isolated iframe with `null` origin, `bleach` backend sanitization, Preview/Code tabs.
 - [x] **Comprehensive Documentation:** `README.md`, `PRD.md`, `architecture.md`, `design.md`, `manual-ui-test-plan.md`.
-- [x] **Automated Test Suite:** 48 passing automated tests (`pytest tests/ -v`).
+- [x] **Automated Test Suite:** 50 passing automated tests (`pytest tests/ -v`).
 - [x] **Clean Secrets & Environment:** `.env.example` with safe defaults, zero committed API keys.
-- [ ] **Camera-On YouTube Demo:** 2–3 minute video demo walk-through (see demo plan in [docs/phases/PHASE_05_TESTS_HANDOFF_AND_SUBMISSION.md](docs/phases/PHASE_05_TESTS_HANDOFF_AND_SUBMISSION.md)).
+- [ ] **Camera-On YouTube Demo:** 2–3 minute video demo walk-through per Section 6 of the assignment.
 - [ ] **GitHub Repository Submission:** Push to public GitHub repository and submit via the assignment form.

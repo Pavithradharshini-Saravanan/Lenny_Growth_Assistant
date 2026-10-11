@@ -22,23 +22,23 @@
    - Also, a previous filter that checked `if "do not contain information" in content.lower(): sources = []` erroneously wiped legitimate sources if the assistant wrote nuanced sentences like *"While the transcripts do not contain information on X, Brian Chesky stated that..."*.
 
 ## 2. Key Code Changes
-- **[ollama_agent.py](file:///d:/Antigravity_Lenny_Growth_Assistant_Pack/Antigravity_Lenny_Growth_Assistant_Pack/backend/app/agent/ollama_agent.py):**
+- **[ollama_agent.py](../backend/app/agent/ollama_agent.py):**
   - Implemented history normalization with a sliding window of recent messages (`history[-6:]`) and deduplication of consecutive identical message turns.
   - Implemented robust tool fallback: if the 3B model skips tool invocation on a factual prompt due to prior history bias, the adapter checks whether grounded transcript chunks exist for the prompt and feeds the evidence to Turn 2 synthesis.
   - Removed substring wipeout of sources; citations are accurately preserved whenever retrieved.
-- **[chat.py](file:///d:/Antigravity_Lenny_Growth_Assistant_Pack/Antigravity_Lenny_Growth_Assistant_Pack/backend/app/api/chat.py):**
+- **[chat.py](../backend/app/api/chat.py):**
   - Added missing `SessionUpdate` import.
   - Added structured Python logging (`logger.info`, `logger.error`, `logger.exception`).
   - Added transaction rollback (`db.delete(user_msg); db.commit()`) in exception handlers to delete orphan user messages if agent execution or response persistence fails.
   - Bounded history passed to adapters to a sliding window (`history_records[:-1][-8:]`).
-- **[ingest.py](file:///d:/Antigravity_Lenny_Growth_Assistant_Pack/Antigravity_Lenny_Growth_Assistant_Pack/backend/app/ingestion/ingest.py):**
+- **[ingest.py](../backend/app/ingestion/ingest.py):**
   - Added title and source URL deduplication check in `ingest_transcript_from_text()`.
-- **[main.py](file:///d:/Antigravity_Lenny_Growth_Assistant_Pack/Antigravity_Lenny_Growth_Assistant_Pack/backend/app/main.py):**
+- **[main.py](../backend/app/main.py):**
   - Added automatic transcript index count check in FastAPI `lifespan` startup handler to trigger sample transcript ingestion if the database is unpopulated.
-- **[app.js](file:///d:/Antigravity_Lenny_Growth_Assistant_Pack/Antigravity_Lenny_Growth_Assistant_Pack/frontend/app.js):**
+- **[app.js](../frontend/app.js):**
   - Implemented submission guard lock (`isSubmitting`) and disabled input + submit button during request lifecycle.
   - Added optimistic DOM rollback (`removeMessage(userMsgId)`) and input text restoration if API returns an error or network fails.
-- **[test_api.py](file:///d:/Antigravity_Lenny_Growth_Assistant_Pack/Antigravity_Lenny_Growth_Assistant_Pack/tests/test_api.py) & [test_ingestion.py](file:///d:/Antigravity_Lenny_Growth_Assistant_Pack/Antigravity_Lenny_Growth_Assistant_Pack/tests/test_ingestion.py):**
+- **[test_api.py](../tests/test_api.py) & [test_ingestion.py](../tests/test_ingestion.py):**
   - Added regression tests covering fresh chat, existing session multi-turn history (`test_existing_session_multi_turn_history`), repeated identical queries (`test_existing_session_repeated_questions`), title update without `NameError`, orphan message cleanup, and transcript deduplication.
 
 ## 3. Empirical Test Results
