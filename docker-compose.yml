@@ -29,6 +29,8 @@ services:
       - DATABASE_URL=postgresql+psycopg2://postgres:postgrespassword@postgres:5432/lenny_assistant
       - PROVIDER_TYPE=ollama
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
+    volumes:
+      - ./frontend:/app/frontend
     depends_on:
       postgres:
         condition: service_healthy
