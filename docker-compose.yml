@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: lenny-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: lenny_assistant
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  backend:
+    build: .
+    container_name: lenny-backend
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgrespassword@postgres:5432/lenny_assistant
+      - PROVIDER_TYPE=ollama
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+    depends_on:
+      - postgres
+
+volumes:
+  pgdata:

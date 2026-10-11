@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Lenny Growth Assistant</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- HEADER -->
+        <header class="app-header">
+            <div class="logo-area">
+                <div class="logo-badge">🚀</div>
+                <div>
+                    <h1 class="app-title">The Lenny Growth Assistant</h1>
+                    <p class="app-subtitle">Product & Growth Intelligence from Lenny's Transcripts</p>
+                </div>
+            </div>
+            
+            <div class="header-controls">
+                <!-- Provider Selector Badge -->
+                <div class="provider-selector-card">
+                    <span class="provider-label">Active Provider:</span>
+                    <select id="providerSelect" class="provider-dropdown">
+                        <option value="ollama">Local Ollama (qwen2.5:3b)</option>
+                        <option value="cloud">Cloud (Anthropic Claude SDK)</option>
+                    </select>
+                    <span id="providerStatusBadge" class="status-badge badge-active">Connected</span>
+                </div>
+                
+                <button id="btnNewChat" class="btn btn-primary">
+                    <span class="btn-icon">+</span> New Chat
+                </button>
+            </div>
+        </header>
+
+        <!-- MAIN SPLIT WORKSPACE -->
+        <div class="workspace">
+            <!-- SIDEBAR: SESSION LIST -->
+            <aside class="sidebar">
+                <div class="sidebar-header">
+                    <h2>Chat Sessions</h2>
+                </div>
+                <div id="sessionList" class="session-list">
+                    <!-- Dynamic session items inserted here -->
+                </div>
+            </aside>
+
+            <!-- CHAT PANEL (LEFT/CENTER) -->
+            <main class="chat-panel">
+                <div id="chatMessages" class="chat-messages">
+                    <!-- Empty State -->
+                    <div id="emptyState" class="empty-state">
+                        <div class="empty-icon">💡</div>
+                        <h2>Ask Lenny Growth Assistant</h2>
+                        <p>Get transcript-grounded insights, draft Ship 30 for 30 essays, or build interactive growth artifacts.</p>
+                        <div class="quick-prompts">
+                            <button class="quick-card" onclick="sendQuickPrompt('How do top PLG companies optimize user onboarding friction?')">
+                                <strong>⚡ PLG Onboarding</strong>
+                                <span>How do top PLG companies optimize onboarding?</span>
+                            </button>
+                            <button class="quick-card" onclick="sendQuickPrompt('Write a Ship 30 for 30 essay on product-market fit metrics.')">
+                                <strong>✍️ Ship 30 Essay</strong>
+                                <span>Write an essay on PMF metrics</span>
+                            </button>
+                            <button class="quick-card" onclick="sendQuickPrompt('Create an HTML dashboard component for tracking North Star metrics.')">
+                                <strong>🎨 HTML Component</strong>
+                                <span>Create a North Star metrics dashboard visual</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CHAT INPUT BAR -->
+                <div class="chat-input-container">
+                    <div id="alertBanner" class="alert-banner hidden"></div>
+                    <form id="chatForm" class="chat-form">
+                        <textarea id="userInput" class="chat-textarea" placeholder="Ask a growth question or request a Ship 30 essay / HTML artifact..." rows="2" required></textarea>
+                        <button type="submit" id="btnSend" class="btn btn-send">
+                            <span>Send</span> ➔
+                        </button>
+                    </form>
+                </div>
+            </main>
+
+            <!-- ARTIFACT VIEWER PANEL (RIGHT) -->
+            <section id="artifactPanel" class="artifact-panel hidden">
+                <div class="artifact-header">
+                    <div class="artifact-title-area">
+                        <span id="artifactBadge" class="artifact-badge">MARKDOWN</span>
+                        <h3 id="artifactTitle">Artifact Preview</h3>
+                    </div>
+                    <div class="artifact-tabs">
+                        <button id="tabPreview" class="tab-btn active" onclick="switchArtifactTab('preview')">Preview</button>
+                        <button id="tabCode" class="tab-btn" onclick="switchArtifactTab('code')">Code</button>
+                        <button id="btnCopyCode" class="tab-btn" onclick="copyArtifactCode()">📋 Copy</button>
+                        <button id="btnCloseArtifact" class="tab-btn btn-close" onclick="closeArtifactPanel()">✕</button>
+                    </div>
+                </div>
+
+                <div class="artifact-content-container">
+                    <!-- Rendered HTML/Markdown view (Sandboxed iframe) -->
+                    <div id="artifactPreviewContainer" class="artifact-view">
+                        <iframe id="artifactIframe" class="sandboxed-iframe" sandbox="allow-scripts" title="Artifact Sandbox"></iframe>
+                    </div>
+
+                    <!-- Raw Code View -->
+                    <div id="artifactCodeContainer" class="artifact-view hidden">
+                        <pre><code id="artifactRawCode"></code></pre>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
