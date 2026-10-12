@@ -28,7 +28,7 @@ class MessageResponse(BaseModel):
 class SessionCreate(BaseModel):
     title: str = Field("New Chat", description="Session title")
     provider: str = Field("ollama", description="Model provider ('ollama' or 'cloud')")
-    model: str = Field("qwen2.5:3b", description="Model identifier")
+    model: str | None = Field(default=None, description="Model identifier")
 
 class SessionUpdate(BaseModel):
     title: str | None = None
@@ -87,5 +87,6 @@ class ConfigResponse(BaseModel):
     active_model: str
     ollama_url: str
     cloud_key_configured: bool
-    supported_providers: list[str] = ["ollama", "cloud"]
-    sdk_integration: str = "Anthropic Claude Agent SDK (claude-agent-sdk)"
+    gemini_key_configured: bool = False
+    supported_providers: list[str] = ["ollama", "cloud", "gemini"]
+    sdk_integration: str = "Anthropic Claude Agent SDK & Google Gemini (REST API)"

@@ -29,6 +29,8 @@ Use these statuses: `NOT STARTED`, `IN PROGRESS`, `VERIFIED`, `BLOCKED`. Only us
 | R23 | `design.md` | Create `docs/design.md` with UI system, interaction states, viewer design | Verified file creation in Phase 0 | VERIFIED |
 | R24 | `architecture.md` | Create `docs/architecture.md` with DB schema, API spec, provider design | Verified file creation in Phase 0 | VERIFIED |
 | R25 | Agent transcripts/logs | Create `agent-logs/` directory and maintain phase records | Phase 0, 1, 2, 3 & 4 log entries created | VERIFIED |
-| R26 | Automated tests and manual UI test plan | Unit/Integration test suite in `tests/` and UI manual test document | Execute pytest suite (`48 passed`) & `docs/manual-ui-test-plan.md` created | VERIFIED |
+| R26 | Automated tests and manual UI test plan | Unit/Integration test suite in `tests/` and UI manual test document | Execute pytest suite (`61 passed`) & `docs/manual-ui-test-plan.md` created | VERIFIED |
 | R27 | 2–3 minute camera-on YouTube demo | Record demo video covering problem, solution, Ollama execution, trade-offs | Link verification in README | NOT STARTED |
 | R28 | Public GitHub repo and submission | GitHub repository creation and submission form submission | Link verification in submission form | NOT STARTED |
+| R29 | Complete transcript library discovery & background ingestion | Dynamic discovery of all 303 episodes via CDN directory/API, non-blocking background worker, restart idempotency | `pytest tests/test_full_ingestion.py` passed | VERIFIED |
+| R30 | Second Cloud AI Provider (Google Gemini) | Implement `GeminiAgentAdapter` with function calling, shared domain tools, missing key validation, and UI integration | `pytest tests/test_gemini.py` passed | VERIFIED |

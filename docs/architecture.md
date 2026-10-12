@@ -1,139 +1,143 @@
-# System Architecture — The Lenny Growth Assistant (Revised & Clarified)
+# System Architecture — The Lenny Growth Assistant
+
+---
 
 ## 1. High-Level Architecture Overview
 
-The Lenny Growth Assistant follows a modular, decoupled full-stack architecture designed for local execution with Ollama while integrating the mandatory **Anthropic Claude Agent SDK** for cloud agent execution.
+The Lenny Growth Assistant follows a decoupled, modular full-stack architecture built for local-first zero-cost execution with Ollama while supporting production cloud agents (Anthropic Claude Agent SDK and Google Gemini).
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                             Frontend (UI)                               │
-│  ┌─────────────────────────────┐       ┌─────────────────────────────┐  │
-│  │   Chat Interface (Stream)   │       │   Sandboxed Artifact Viewer │  │
-│  └──────────────┬──────────────┘       └──────────────▲──────────────┘  │
-└─────────────────┼─────────────────────────────────────┼─────────────────┘
-                  │ HTTP / REST API                     │ Render (HTML/MD)
-                  ▼                                     │
-┌───────────────────────────────────────────────────────┴─────────────────┐
-│                       FastAPI Backend Service                           │
-│  ┌────────────────────────┐         ┌────────────────────────────────┐  │
-│  │ API Routing & Sessions │         │    Agent Strategy Dispatcher   │  │
-│  └───────────┬────────────┘         └───────────────┬────────────────┘  │
-│              │                                      │                   │
-│              ▼                                      │                   │
-│  ┌────────────────────────┐                         │                   │
-│  │  PostgreSQL Storage    │                         │                   │
-│  │  (Sessions, Messages)  │                         │                   │
-│  └────────────────────────┘                         │                   │
-│                                                     │                   │
-│              ┌──────────────────────────────────────┴────────────┐      │
-│              │                                                   │      │
-│              ▼ (Cloud Mode)                                      ▼ (Local Mode)
-│  ┌───────────────────────────────────┐               ┌──────────────────┐
-│  │ ClaudeAgentSDKAdapter             │               │ OllamaAgent      │
-│  │ (claude-agent-sdk / Client)       │               │ Adapter          │
-│  │ - Uses claude-agent-sdk library   │               │ - Native Ollama  │
-│  │ - Wraps bundled binary & API key  │               │   tool-calling   │
-│  │ - Registered via @tool decorator  │               │ - qwen2.5:3b     │
-│  └─────────────────┬─────────────────┘               └─────────┬────────┘
-│                    │                                           │
-│                    └─────────────────────┬─────────────────────┘
-│                                          ▼
-│                        ┌──────────────────────────────────┐
-│                        │ Shared Core Domain Tools         │
-│                        │ (backend/app/tools/)             │
-│                        │ - search_transcripts             │
-│                        │ - run_ship30_skill               │
-│                        │ - create_artifact                │
-│                        └─────────────────┬────────────────┘
-│                                          │
-│                                          ▼
-│                        ┌──────────────────────────────────┐
-│                        │ Transcript Knowledge Base        │
-│                        │ (Ingested Chunks & Metadata)     │
-│                        └──────────────────────────────────┘
-└─────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                          FRONTEND (SPA)                                          │
+│  ┌────────────────────────────────────────┐          ┌────────────────────────────────────────┐  │
+│  │   Chat Stream & Session Management     │          │   Sandboxed Artifact Viewer (Side-by-  │  │
+│  │   (HTML5 / Vanilla CSS & JavaScript)   │          │   Side Iframe with Opaque null Origin) │  │
+│  └───────────────────┬────────────────────┘          └───────────────────▲────────────────────┘  │
+└──────────────────────┼───────────────────────────────────────────────────┼───────────────────────┘
+                       │ HTTP REST (JSON)                                  │ Render (HTML/Markdown)
+                       ▼                                                   │
+┌──────────────────────────────────────────────────────────────────────────┴───────────────────────┐
+│                                       FASTAPI BACKEND SERVICE                                    │
+│  ┌───────────────────────────────────┐             ┌──────────────────────────────────────────┐  │
+│  │  REST API Routing & Middleware    │             │  Agent Strategy Dispatcher               │  │
+│  │  (/chat, /sessions, /ingest)      │             │  (Selects Provider Adapter dynamically)  │  │
+│  └─────────────────┬─────────────────┘             └────────────────────┬─────────────────────┘  │
+│                    │                                                    │                        │
+│                    ▼                                                    ▼                        │
+│  ┌───────────────────────────────────┐             ┌──────────────────────────────────────────┐  │
+│  │  Session & Persistence Service    │             │  Agent Adapters                          │  │
+│  │  (SessionService / SQLAlchemy ORM)│             │  - OllamaAgentAdapter (Local Native/Tool)│  │
+│  └─────────────────┬─────────────────┘             │  - ClaudeAgentSDKAdapter (Anthropic SDK) │  │
+│                    │                               │  - GeminiAgentAdapter (Google REST API)  │  │
+│                    ▼                               └────────────────────┬─────────────────────┘  │
+│  ┌───────────────────────────────────┐                                  │                        │
+│  │  Database Storage Engine          │                                  ▼                        │
+│  │  (PostgreSQL 16 / SQLite dual)    │             ┌──────────────────────────────────────────┐  │
+│  │  - sessions, messages, artifacts  │             │  Shared Core Domain Tools                │  │
+│  │  - transcripts, transcript_chunks │             │  - search_transcripts_domain             │  │
+│  └─────────────────▲─────────────────┘             │  - run_ship30_skill_domain               │  │
+│                    │                               │  - create_artifact_domain                │  │
+│                    │                               └────────────┬─────────────────────────────┘  │
+│                    │                                            │                                │
+│                    │                                            ▼                                │
+│  ┌─────────────────┴─────────────────┐             ┌──────────────────────────────────────────┐  │
+│  │  Dynamic Ingestion Manager        │             │  Hybrid RAG Retrieval Engine             │  │
+│  │  (Detached Background Worker)     ├────────────►│  (BM25 TF-IDF Relevance Scoring &        │  │
+│  │  - Discovers 303 upstream episodes│             │   Speaker Excerpt Extraction)            │  │
+│  └───────────────────────────────────┘             └──────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 2. Agent Framework Technical Verification & Architectural Clarifications
+## 2. Component Boundaries & Responsibilities
 
-### 2.1 Claude Agent SDK Requirements & Runtime Behavior
-Verified against official Anthropic documentation (`https://code.claude.com/docs/en/agent-sdk/quickstart`):
-- **Runtime Dependencies:** The `claude-agent-sdk` Python package bundles platform binary wheels for supported OS environments (macOS, Linux, x86_64 Windows). It operates by launching and communicating with a background binary runtime process via subprocess IPC transport (`Transport`).
-- **Authentication & Setup:** Requires `ANTHROPIC_API_KEY` set in the environment (or cloud platform credentials like AWS Bedrock / GCP Vertex). It does not automatically parse `.env` files, so the FastAPI backend explicitly loads configuration into environment variables before invocation.
+### 2.1 Frontend Single Page Application (`frontend/`)
+- **Technology:** Pure HTML5, modern CSS3, and vanilla ES6+ JavaScript with zero compilation/bundling steps.
+- **Responsibilities:** Renders conversation history, tracks session switching, monitors background ingestion progress, formats markdown into structured HTML, handles Enter-to-send keyboard shortcuts, and renders generated artifacts inside an isolated iframe.
+- **Boundary Invariant:** The frontend never communicates directly with LLM providers; all requests route through the FastAPI backend.
 
-### 2.2 Structural Testing of Cloud Agent Without Paid Key
-- The `ClaudeAgentSDKAdapter` is fully implemented in `backend/app/agent/claude_agent.py` and unit-tested using mocks/spies to verify structural compliance without making live API calls.
-- If selected at runtime without `ANTHROPIC_API_KEY`, `ClaudeAgentSDKAdapter` raises `ConfigurationError("Anthropic Claude Agent SDK requires ANTHROPIC_API_KEY in environment")`.
-- Local Ollama mode remains 100% operational and zero-cost, completely independent of cloud key status.
+### 2.2 FastAPI Application Layer (`backend/app/api/`)
+- **Technology:** FastAPI, Uvicorn ASGI server, Pydantic v2 request/response schemas.
+- **Responsibilities:**
+  - `/api/chat`: Validates session existence, persists user inputs, delegates to the agent adapter, persists assistant responses and artifacts, and updates session titles.
+  - `/api/sessions`: CRUD operations for independent multi-turn conversation sessions.
+  - `/api/ingest`: Dynamic discovery and ingestion endpoints (`/api/ingest`, `/api/ingest/status`).
+  - `/api/health` & `/api/config`: System status, database health, provider connectivity, and model discovery.
 
-### 2.3 Ollama Adapter Dynamic Tool Execution
-- The `OllamaAgentAdapter` performs a genuine, multi-step LLM function-calling agent loop.
-- Tool schemas (`search_transcripts`, `run_ship30_skill`, `create_artifact`) are passed in the Ollama `/api/chat` call.
-- The adapter parses `tool_calls` returned by `qwen2.5:3b`, executes the requested domain tool, appends the tool message to history, and loops back to the LLM until completion. No keyword routing or regex triggers are used.
+### 2.3 Agent Layer & Strategy Dispatcher (`backend/app/agent/`)
+- **`BaseAgentAdapter`:** Abstract base class defining common execution interfaces (`run_agent`), provider names, and SDK attributes.
+- **`AgentDispatcher`:** Factory that instantiates the active adapter based on user selection:
+  1. `OllamaAgentAdapter`: Executes local multi-turn function calling against Ollama (`qwen2.5:3b` / `gemma3:4b`). Supports native function calling and capability-detected JSON parsing.
+  2. `ClaudeAgentSDKAdapter`: Integrates the official Anthropic Claude Agent SDK (`claude-agent-sdk`) using `@tool` registrations.
+  3. `GeminiAgentAdapter`: Executes Google Gemini via OpenAI-compatible REST endpoints.
+- **Strict Non-Fallback Rule:** If a user selects a cloud provider without configuring the required API key, the adapter immediately raises `ConfigurationError`, translating to an HTTP 400 error. The system never silently defaults to another provider.
 
-### 2.4 Tool Code Sharing & Honest Attribution
-- **Core Domain Logic (`backend/app/tools/`):** Pure Python functions implementing search, Ship 30 essay generation, and artifact creation.
-- **`ClaudeAgentSDKAdapter`:** Registers core tools via `@tool` decorators for `ClaudeSDKClient`.
-- **`OllamaAgentAdapter`:** Exposes core tools as JSON Schema function declarations for Ollama.
-- **Attribution:** Telemetry and UI logs explicitly differentiate between `ClaudeAgentSDKAdapter` (Cloud mode via SDK) and `OllamaAgentAdapter` (Local mode via Ollama API), eliminating false framework claims.
+### 2.4 Domain Tools Layer (`backend/app/tools/`)
+Contains pure Python domain functions decoupled from any specific LLM provider:
+- `search_transcripts_domain(query, top_k)`: Queries the retrieval service and returns grounded evidence chunks.
+- `run_ship30_skill_domain(topic, audience)`: Generates structured ~1,250-word essays adhering to Ship 30 principles.
+- `create_artifact_domain(title, artifact_type, content)`: Sanitizes HTML/Markdown code using `bleach` and structures the artifact payload.
+
+### 2.5 Ingestion & RAG Retrieval Engine (`backend/app/ingestion/` & `backend/app/services/`)
+- **`IngestionManager`:** Non-blocking background worker that dynamically discovers all 303 episodes from the upstream GitHub/CDN repository, parses YAML frontmatter, semantically chunks paragraphs by speaker boundaries, and persists them idempotently.
+- **`RetrievalService`:** Custom BM25 TF-IDF engine calculating term frequency, inverse document frequency, length normalization, and speaker attribution.
 
 ---
 
-## 3. Database Schema (PostgreSQL)
+## 3. Database Schema (PostgreSQL & SQLite)
+
+The system supports dual persistence: **PostgreSQL 16** for production/Docker environments, and **SQLite** for local development.
 
 ```sql
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
--- Sessions Table
-CREATE TABLE IF NOT EXISTS sessions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+-- 1. Sessions Table (Independent Multi-Turn Conversations)
+CREATE TABLE sessions (
+    id VARCHAR(36) PRIMARY KEY,
     title VARCHAR(255) NOT NULL DEFAULT 'New Chat',
     provider VARCHAR(50) NOT NULL DEFAULT 'ollama',
     model VARCHAR(100) NOT NULL DEFAULT 'qwen2.5:3b',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    metadata JSONB DEFAULT '{}'::jsonb
+    metadata JSON DEFAULT '{}'
 );
 
--- Messages Table
-CREATE TABLE IF NOT EXISTS messages (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+-- 2. Messages Table (Conversation History with Source Attribution)
+CREATE TABLE messages (
+    id VARCHAR(36) PRIMARY KEY,
+    session_id VARCHAR(36) NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     role VARCHAR(50) NOT NULL,
     content TEXT NOT NULL,
-    sources JSONB DEFAULT '[]'::jsonb,
+    sources JSON DEFAULT '[]',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Transcripts Table
-CREATE TABLE IF NOT EXISTS transcripts (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+-- 3. Transcripts Table (Ingested Podcast Episodes)
+CREATE TABLE transcripts (
+    id VARCHAR(36) PRIMARY KEY,
     title VARCHAR(512) NOT NULL,
     source_url VARCHAR(1024),
-    episode_number INT,
+    episode_number INTEGER,
     publish_date DATE,
     raw_text TEXT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Transcript Chunks Table
-CREATE TABLE IF NOT EXISTS transcript_chunks (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    transcript_id UUID NOT NULL REFERENCES transcripts(id) ON DELETE CASCADE,
-    chunk_index INT NOT NULL,
+-- 4. Transcript Chunks Table (Semantic Chunks for Retrieval)
+CREATE TABLE transcript_chunks (
+    id VARCHAR(36) PRIMARY KEY,
+    transcript_id VARCHAR(36) NOT NULL REFERENCES transcripts(id) ON DELETE CASCADE,
+    chunk_index INTEGER NOT NULL,
     content TEXT NOT NULL,
     speaker VARCHAR(255),
-    metadata JSONB DEFAULT '{}'::jsonb,
+    metadata JSON DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Artifacts Table
-CREATE TABLE IF NOT EXISTS artifacts (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-    message_id UUID REFERENCES messages(id) ON DELETE SET NULL,
+-- 5. Artifacts Table (Generated Markdown & HTML Components)
+CREATE TABLE artifacts (
+    id VARCHAR(36) PRIMARY KEY,
+    session_id VARCHAR(36) NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    message_id VARCHAR(36) REFERENCES messages(id) ON DELETE SET NULL,
     title VARCHAR(255) NOT NULL,
     artifact_type VARCHAR(50) NOT NULL,
     content TEXT NOT NULL,
@@ -143,33 +147,95 @@ CREATE TABLE IF NOT EXISTS artifacts (
 
 ---
 
-## 4. Security & Artifact Viewer Isolation Boundary
+## 4. API Endpoints Specification
 
-Generated HTML and Markdown artifacts are treated as **untrusted user-facing code**. The architecture implements defense-in-depth across both backend sanitization and frontend browsing context sandboxing.
+| Method | Endpoint | Description | Request Body | Response Model |
+|---|---|---|---|---|
+| `GET` | `/health` | System health, database connection, and Ollama reachability. | None | `HealthResponse` |
+| `GET` | `/api/config` | Active provider, active model, cloud API key status. | None | `ConfigResponse` |
+| `GET` | `/api/sessions` | List all conversation sessions ordered by last updated. | None | `list[SessionResponse]` |
+| `POST` | `/api/sessions` | Create a new conversation session. | `SessionCreate` | `SessionResponse` |
+| `GET` | `/api/sessions/{id}` | Retrieve specific session metadata. | None | `SessionResponse` |
+| `PATCH` | `/api/sessions/{id}` | Update session title or provider. | `SessionUpdate` | `SessionResponse` |
+| `DELETE` | `/api/sessions/{id}` | Delete session and cascade delete messages and artifacts. | None | `{"status": "deleted"}` |
+| `GET` | `/api/sessions/{id}/messages` | Retrieve conversation turn history for a session. | None | `list[MessageResponse]` |
+| `GET` | `/api/sessions/{id}/artifacts` | Retrieve all artifacts generated in a session. | None | `list[ArtifactResponse]` |
+| `POST` | `/api/chat` | Send prompt, execute agent, return grounded answer. | `ChatRequest` | `ChatResponse` |
+| `POST` | `/api/ingest` | Trigger transcript library ingestion. | `{"sample_only": bool}` | `{"status": "started"}` |
+| `GET` | `/api/ingest/status` | Real-time ingestion progress, processed count, total count. | None | `IngestionStatus` |
 
-### 4.1 Frontend Sandboxed Execution Model
-HTML/CSS artifacts are rendered in an isolated `<iframe>` configured strictly with:
-```html
-<iframe id="artifactIframe" class="sandboxed-iframe" sandbox="allow-scripts" title="Artifact Sandbox"></iframe>
+---
+
+## 5. Ingestion & Retrieval Pipeline
+
+```
+Upstream GitHub/CDN (ChatPRD/lennys-podcast-transcripts)
+                  │
+                  ▼
+Dynamic Discovery (303 episode Markdown files discovered without hardcoded lists)
+                  │
+                  ▼
+YAML Frontmatter Extraction (title, guest, date, YouTube URL)
+                  │
+                  ▼
+Semantic Chunking (Split by paragraph & speaker changes; ~300–800 words/chunk)
+                  │
+                  ▼
+Relational Persistence (Stored in PostgreSQL/SQLite `transcripts` & `transcript_chunks`)
+                  │
+                  ▼
+Query Runtime: BM25 TF-IDF Vector Retrieval (Calculates query term match, speaker weighting)
+                  │
+                  ▼
+Top-K Relevance Scoring & Excerpt Formatting (Passed into Agent function calling context)
 ```
 
-#### What the Viewer Permits:
-1. **Interactive Client Scripts (`allow-scripts`):** Allows client-side JavaScript execution inside the iframe so interactive calculators, dynamic UI components, state machines, canvas elements, and SVG chart renderers function properly.
-2. **Safe CSS & Layout Styling:** Full CSS styling, flexbox, grid, animations, transitions, and web typography.
-3. **Semantic HTML5 & Visual Markup:** Tables, lists, forms, buttons, cards, SVGs, and containers.
+---
 
-#### What the Viewer Strictly Blocks:
-1. **Opaque `null` Origin Isolation (Omission of `allow-same-origin`):** The browser assigns the sandboxed iframe a unique opaque origin (`null`). It cannot match the parent application's origin under the Same-Origin Policy.
-2. **Parent DOM & Window Access:** Any script invoking `window.parent`, `window.top`, or accessing parent document objects immediately fails with a fatal browser error: `SecurityError: Blocked a frame with origin "null" from accessing a cross-origin frame.`
-3. **Cookie & Local Storage Theft:** The sandboxed frame cannot access `document.cookie`, `localStorage`, or `sessionStorage` of the host app. Attempts throw `SecurityError: Access to Storage is not allowed for this document.`
-4. **Top Navigation Hijacking (Omission of `allow-top-navigation`):** The iframe cannot redirect the user's browser away from the application (`window.top.location = ...`).
-5. **Popups and Modals (Omission of `allow-popups` & `allow-modals`):** Prevents phishing popups, new window opening, or modal prompt spam.
-6. **Backend Credential Isolation:** The sandboxed context carries no bearer tokens, session cookies, or parent headers, preventing CSRF or unauthorized backend mutations.
+## 6. Agent Routing & Model Toggle
 
-### 4.2 Backend HTML Sanitization Layer
-Before any artifact is persisted to PostgreSQL or transmitted over the API, `backend/app/tools/base.py` (`create_artifact_domain`) enforces strict sanitization:
-1. **Neutralizes Sandbox Escape Vectors:** Scans for and neutralizes patterns targeting `window.parent`, `top.location`, `document.cookie`, and web storage.
-2. **Protocol Restrictions:** Disallows `javascript:` pseudo-protocols and `data:text/html` MIME types.
-3. **Attribute Sanitization:** Strips dangerous inline event handlers (`onerror`, `onload`, `onclick`, `onmouseover`) using `bleach.clean`.
-4. **Tag Whitelisting:** Permits standard layout, typography, SVG, and presentation tags while stripping dangerous elements.
+1. **Provider Selection:** Users toggle between Local Ollama, Cloud Anthropic, and Google Gemini via the UI header dropdown. The selection is stored in session metadata.
+2. **Zero Silent Fallback Invariant:**
+   - If Cloud Anthropic is requested without `ANTHROPIC_API_KEY`, the adapter raises `ConfigurationError("Anthropic Claude Agent SDK requires ANTHROPIC_API_KEY in environment")`.
+   - If Google Gemini is requested without `GEMINI_API_KEY`, the adapter raises `ConfigurationError("Google Gemini requires GEMINI_API_KEY in environment")`.
+   - The API converts `ConfigurationError` into HTTP 400 Bad Request. The server never silently routes cloud queries to Ollama.
+3. **Session Consistency:** Re-opening an existing session automatically restores its configured provider and model, ensuring multi-turn coherence.
 
+---
+
+## 7. Security Architecture & Sandbox Isolation Boundary
+
+Generated HTML and Markdown artifacts are treated as **untrusted third-party code**. The system enforces two independent layers of security isolation:
+
+```
+[Agent Generates HTML/Markdown]
+              │
+              ▼
+[Layer 1: Backend Bleach Sanitization]
+- Strips dangerous inline handlers (onerror, onload, onclick)
+- Neutralizes window.parent, top.location, document.cookie, localStorage
+- Disallows javascript: pseudo-protocols and data: URIs
+              │
+              ▼
+[Layer 2: Frontend Iframe Sandbox Isolation]
+<iframe sandbox="allow-scripts" srcdoc="...">
+- Opaque null Origin: Browser assigns origin "null"; Same-Origin Policy blocks host DOM access.
+- Storage Theft Blocked: Access to document.cookie, localStorage, sessionStorage throws SecurityError.
+- Top Navigation Blocked: window.top.location redirection is prohibited.
+- Popups/Modals Blocked: window.open and modal dialogs are suppressed.
+```
+
+---
+
+## 8. Deployment Topology
+
+### Topology A: Local Bare-Metal (Evaluator Default)
+- **Host OS:** Windows 10/11, macOS, or Linux.
+- **Process 1:** Ollama serving on `http://localhost:11434` with `qwen2.5:3b` or `gemma3:4b`.
+- **Process 2:** Python virtual environment running FastAPI via Uvicorn on port 8000 (`python run.py`).
+- **Database:** Local SQLite (`lenny_growth_assistant.db`).
+
+### Topology B: Containerized Docker Compose
+- **Service 1 (`db`):** PostgreSQL 16 container on port 5432 with health check.
+- **Service 2 (`backend`):** Multi-stage Debian-slim container exposing port 8000, communicating with host Ollama via `host.docker.internal:11434` and PostgreSQL via container network.
+- **Launch Command:** `docker-compose up --build`.

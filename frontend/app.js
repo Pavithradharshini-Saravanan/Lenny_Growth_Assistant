@@ -22,7 +22,14 @@ async function checkConfig() {
             const data = await res.json();
             currentProvider = data.active_provider;
             const selectEl = document.getElementById('providerSelect');
-            if (selectEl) selectEl.value = currentProvider;
+            if (selectEl) {
+                // If local ollama is active or configured, update the option text to show the active model
+                const ollamaOpt = selectEl.querySelector('option[value="ollama"]');
+                if (ollamaOpt && data.active_model && (data.active_provider === 'ollama' || data.active_model.includes('qwen') || data.active_model.includes('gemma'))) {
+                    ollamaOpt.textContent = `Local Ollama (${data.active_model})`;
+                }
+                selectEl.value = currentProvider;
+            }
         }
     } catch (e) {
         console.error('Config fetch failed:', e);
@@ -39,6 +46,18 @@ async function updateProviderStatus() {
             if (res.ok) {
                 const cfg = await res.json();
                 if (cfg.cloud_key_configured) {
+                    badge.textContent = 'Configured';
+                    badge.className = 'status-badge badge-active';
+                } else {
+                    badge.textContent = 'Key Missing';
+                    badge.className = 'status-badge badge-warning';
+                }
+            }
+        } else if (currentProvider === 'gemini') {
+            const res = await fetch(`${API_BASE}/config`);
+            if (res.ok) {
+                const cfg = await res.json();
+                if (cfg.gemini_key_configured) {
                     badge.textContent = 'Configured';
                     badge.className = 'status-badge badge-active';
                 } else {
@@ -64,6 +83,61 @@ async function updateProviderStatus() {
         badge.className = 'status-badge badge-error';
     }
 }
+
+async function updateIngestionStatus() {
+    const statusTextEl = document.getElementById('kbStatusText');
+    const detailTextEl = document.getElementById('kbDetailText');
+    const progressBarEl = document.getElementById('kbProgressBar');
+    const dotEl = document.getElementById('kbDot');
+
+    if (!statusTextEl) return;
+
+    try {
+        const res = await fetch(`${API_BASE}/ingest/status`);
+        if (!res.ok) return;
+        const data = await res.json();
+
+        const discovered = data.discovered_count || 0;
+        const processed = data.processed_count || 0;
+        const totalChunks = data.total_chunks || 0;
+        const isRunning = data.is_running;
+        const status = data.status;
+
+        let pct = 0;
+        if (discovered > 0) {
+            pct = Math.min(100, Math.round((processed / discovered) * 100));
+        } else if (processed > 0) {
+            pct = 100;
+        }
+
+        if (progressBarEl) {
+            progressBarEl.style.width = `${pct}%`;
+        }
+
+        if (status === 'indexing' || isRunning) {
+            if (dotEl) dotEl.className = 'kb-dot kb-dot-indexing';
+            statusTextEl.textContent = `Indexing Library (${pct}%)`;
+            const epSnippet = data.current_episode ? ` • ${data.current_episode.slice(0, 24)}...` : '';
+            const totalLabel = discovered > 0 ? discovered : '?';
+            detailTextEl.textContent = `${processed} / ${totalLabel} episodes${epSnippet}`;
+        } else if (data.ready || processed > 0) {
+            if (dotEl) dotEl.className = 'kb-dot kb-dot-ready';
+            statusTextEl.textContent = `Library Ready (${processed} episodes)`;
+            detailTextEl.textContent = `${processed} episodes indexed • ${totalChunks.toLocaleString()} chunks`;
+        } else if (status === 'error') {
+            if (dotEl) dotEl.className = 'kb-dot kb-dot-error';
+            statusTextEl.textContent = 'Ingestion Error';
+            detailTextEl.textContent = data.error_message || 'Error occurred';
+        } else {
+            if (dotEl) dotEl.className = 'kb-dot';
+            statusTextEl.textContent = 'Discovering Transcripts...';
+            detailTextEl.textContent = 'Connecting to upstream source';
+        }
+    } catch (e) {
+        // Silent catch for polling
+    }
+}
+
 
 function setupEventListeners() {
     document.getElementById('btnNewChat').addEventListener('click', createNewSession);
@@ -194,6 +268,29 @@ async function handleProviderChange(e) {
     hideAlert();
     await updateProviderStatus();
 
+    // Check if cloud provider has missing credentials and inform user
+    if (currentProvider === 'gemini') {
+        try {
+            const res = await fetch(`${API_BASE}/config`);
+            if (res.ok) {
+                const cfg = await res.json();
+                if (!cfg.gemini_key_configured) {
+                    showAlert('⚠️ Google Gemini selected: GEMINI_API_KEY is not set in .env. Configure your key to send queries, or switch to Local Ollama.');
+                }
+            }
+        } catch (err) { }
+    } else if (currentProvider === 'cloud') {
+        try {
+            const res = await fetch(`${API_BASE}/config`);
+            if (res.ok) {
+                const cfg = await res.json();
+                if (!cfg.cloud_key_configured) {
+                    showAlert('⚠️ Anthropic Claude selected: ANTHROPIC_API_KEY is not set in .env. Configure your key to send queries, or switch to Local Ollama.');
+                }
+            }
+        } catch (err) { }
+    }
+
     // Persist provider change to active session if one exists
     if (currentSessionId) {
         try {
@@ -318,13 +415,36 @@ function hideEmptyState() {
     if (empty) empty.remove();
 }
 
+function formatMessageContent(content) {
+    if (!content) return '';
+    let formatted = escapeHtml(content);
+
+    // Convert markdown headings (### Title) to bold headings
+    formatted = formatted.replace(/(^|\n)#{1,4}\s*(.*?)(?=\n|$)/g, '$1<strong>$2</strong>');
+
+    // Convert markdown bold (**text**) to <strong>text</strong> (cleanly removes raw **)
+    formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+    // Remove any remaining stray unclosed ** markers cleanly
+    formatted = formatted.replace(/\*\*/g, '');
+
+    // Convert markdown italic (*text*) to <em>text</em>
+    formatted = formatted.replace(/(^|[^*])\*(?!\s)([^*]+?)(?<!\s)\*(?=[^*]|$)/g, '$1<em>$2</em>');
+
+    // Convert bullet asterisks (* item) to clean bullets (• item)
+    formatted = formatted.replace(/(^|\n)\s*\*\s+/g, '$1&bull; ');
+
+    // Convert newlines to HTML line breaks
+    return formatted.replace(/\n/g, '<br>');
+}
+
 function renderMessage(role, content, sources = [], elemId = null) {
     const container = document.getElementById('chatMessages');
     const msgCard = document.createElement('div');
     if (elemId) msgCard.id = elemId;
     msgCard.className = `message-card ${role === 'user' ? 'message-user' : 'message-assistant'}`;
 
-    let html = `<div>${escapeHtml(content).replace(/\n/g, '<br>')}</div>`;
+    let html = `<div>${formatMessageContent(content)}</div>`;
 
     if (sources && sources.length > 0) {
         html += `<div class="source-badges">`;
@@ -395,12 +515,22 @@ function openArtifactViewer(artifact) {
     document.getElementById('artifactTitle').textContent = artifact.title || 'Artifact';
     document.getElementById('artifactBadge').textContent = (artifact.artifact_type || 'markdown').toUpperCase();
 
+    let cleanContent = artifact.content || '';
+    if (artifact.artifact_type === 'html') {
+        cleanContent = cleanContent
+            .replace(/&lt;meta[^&gt;]*&gt;/gi, '')
+            .replace(/<meta[^>]*\/?>/gi, '')
+            .replace(/&lt;!DOCTYPE[^&gt;]*&gt;/gi, '')
+            .replace(/<!DOCTYPE[^>]*>/gi, '')
+            .trim();
+    }
+
     const rawCode = document.getElementById('artifactRawCode');
-    rawCode.textContent = artifact.content || '';
+    rawCode.textContent = cleanContent;
 
     const iframe = document.getElementById('artifactIframe');
     if (artifact.artifact_type === 'html') {
-        iframe.srcdoc = artifact.content || '';
+        iframe.srcdoc = cleanContent;
     } else {
         const rendered = renderMarkdownToHtml(artifact.content || '');
         iframe.srcdoc = `<!DOCTYPE html>

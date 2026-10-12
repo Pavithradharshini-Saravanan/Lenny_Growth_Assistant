@@ -121,3 +121,33 @@ def test_iframe_sandbox_policy_in_frontend():
     # to guarantee opaque null origin isolation
     assert 'sandbox="allow-scripts"' in html
     assert 'allow-same-origin' not in html, "Security violation: allow-same-origin must NOT be granted to untrusted artifacts"
+
+
+def test_create_html_artifact_strips_meta_and_doctype_tags():
+    """Verify that meta and doctype tags are cleanly removed from HTML artifacts."""
+    payload_with_meta = """<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Funnel Visualizer</title>
+</head>
+<body>
+    <div class="funnel">
+        <h2>Conversion Funnel</h2>
+    </div>
+</body>
+</html>"""
+
+    art = create_artifact_domain(
+        title="Funnel Visualizer",
+        artifact_type="html",
+        content=payload_with_meta
+    )
+    content = art["content"]
+    assert "<meta" not in content.lower()
+    assert "&lt;meta" not in content.lower()
+    assert "<!doctype" not in content.lower()
+    assert "&lt;!doctype" not in content.lower()
+    assert '<div class="funnel">' in content
+    assert "<h2>Conversion Funnel</h2>" in content

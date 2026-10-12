@@ -2,14 +2,27 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 from backend.app.db.models import SessionModel, MessageModel, ArtifactModel
 from backend.app.schemas.session import SessionCreate, SessionUpdate, MessageCreate
+from backend.app.config import settings
 
 class SessionService:
     @staticmethod
     def create_session(db: Session, session_in: SessionCreate) -> SessionModel:
+        chosen_model = session_in.model
+        if not chosen_model:
+            prov = (session_in.provider or "ollama").lower()
+            if prov == "ollama":
+                chosen_model = settings.OLLAMA_MODEL
+            elif prov in ("gemini", "google"):
+                chosen_model = settings.GEMINI_MODEL
+            elif prov == "cloud":
+                chosen_model = settings.CLOUD_MODEL
+            else:
+                chosen_model = settings.OLLAMA_MODEL
+
         db_session = SessionModel(
             title=session_in.title,
             provider=session_in.provider,
-            model=session_in.model
+            model=chosen_model
         )
         db.add(db_session)
         db.commit()

@@ -48,6 +48,12 @@ def sanitize_html_artifact(html_content: str) -> str:
     """
     content = str(html_content or "")
 
+    # Strip <!DOCTYPE> and <meta> tags so they are not escaped into visible text
+    content = re.sub(r"<!DOCTYPE[^>]*>", "", content, flags=re.IGNORECASE)
+    content = re.sub(r"&lt;!DOCTYPE[^&gt;]*&gt;", "", content, flags=re.IGNORECASE)
+    content = re.sub(r"<meta[^>]*\/?>", "", content, flags=re.IGNORECASE)
+    content = re.sub(r"&lt;meta[^&gt;]*&gt;", "", content, flags=re.IGNORECASE)
+
     # Block attempts to target parent frame, cookies, or local/session storage
     dangerous_patterns = [
         r"window\.parent",
@@ -91,7 +97,13 @@ def sanitize_html_artifact(html_content: str) -> str:
             protocols=allowed_protocols,
             strip=False
         )
-    return cleaned
+
+    # Clean up any leftover escaped or raw meta/doctype tags and trim whitespace
+    cleaned = re.sub(r"&lt;meta[^&gt;]*&gt;", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"<meta[^>]*\/?>", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"&lt;!DOCTYPE[^&gt;]*&gt;", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"<!DOCTYPE[^>]*>", "", cleaned, flags=re.IGNORECASE)
+    return cleaned.strip()
 
 def run_ship30_skill_domain(topic: str, audience: str = "Product Practitioners", db: Session | None = None) -> dict[str, Any]:
     """Pure domain service for executing Ship 30 for 30 writing transformation using transcript evidence."""

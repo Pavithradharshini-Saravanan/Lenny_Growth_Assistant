@@ -35,14 +35,22 @@ def health_check(db: Session = Depends(get_db)):
 
 @router.get("/config", response_model=ConfigResponse)
 def get_config():
-    has_key = bool(settings.ANTHROPIC_API_KEY)
-    active_model = settings.OLLAMA_MODEL if settings.PROVIDER_TYPE == "ollama" else settings.CLOUD_MODEL
+    has_anthropic = bool(settings.ANTHROPIC_API_KEY)
+    has_gemini = bool(settings.GEMINI_API_KEY)
+
+    if settings.PROVIDER_TYPE == "ollama":
+        active_model = settings.OLLAMA_MODEL
+    elif settings.PROVIDER_TYPE in ("gemini", "google"):
+        active_model = settings.GEMINI_MODEL
+    else:
+        active_model = settings.CLOUD_MODEL
 
     return ConfigResponse(
         active_provider=settings.PROVIDER_TYPE,
         active_model=active_model,
         ollama_url=settings.OLLAMA_BASE_URL,
-        cloud_key_configured=has_key,
-        supported_providers=["ollama", "cloud"],
-        sdk_integration="Anthropic Claude Agent SDK (claude-agent-sdk)"
+        cloud_key_configured=has_anthropic,
+        gemini_key_configured=has_gemini,
+        supported_providers=["ollama", "cloud", "gemini"],
+        sdk_integration="Anthropic Claude Agent SDK & Google Gemini (REST API)"
     )

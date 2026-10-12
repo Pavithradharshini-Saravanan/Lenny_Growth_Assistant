@@ -1,4 +1,5 @@
 import os
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,23 +22,13 @@ async def lifespan(app: FastAPI):
     # Initialize database tables on startup
     init_db()
     
-    # Auto-ingest sample transcripts if database is unpopulated
+    # Automatically start background ingestion of complete transcript collection non-blockingly
     try:
-        from backend.app.db.database import SessionLocal
-        from backend.app.db.models import TranscriptChunkModel
-        from backend.app.ingestion.ingest import run_sample_ingestion
-        db = SessionLocal()
-        try:
-            chunk_count = db.query(TranscriptChunkModel).count()
-            if chunk_count == 0:
-                logger.info("📦 Empty transcript database detected. Ingesting initial sample transcripts...")
-                run_sample_ingestion(db)
-            else:
-                logger.info(f"✅ Transcript index verified. Currently {chunk_count} indexed chunks available.")
-        finally:
-            db.close()
+        from backend.app.ingestion.ingest import ingestion_manager
+        asyncio.create_task(ingestion_manager.start_background_ingestion())
+        logger.info("🚀 Background transcript discovery & indexing task launched non-blockingly.")
     except Exception as e:
-        logger.warning(f"Auto-ingestion check on startup encountered an issue: {e}")
+        logger.warning(f"Auto-ingestion background launch encountered an issue: {e}")
         
     yield
 

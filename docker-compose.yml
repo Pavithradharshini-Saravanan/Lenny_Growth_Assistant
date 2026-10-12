@@ -6,9 +6,9 @@ services:
     container_name: lenny-postgres
     restart: always
     environment:
-      POSTGRES_DB: lenny_assistant
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: ${POSTGRES_DB:-lenny_assistant}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgrespassword}
     ports:
       - "5432:5432"
     volumes:
@@ -26,14 +26,19 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql+psycopg2://postgres:postgrespassword@postgres:5432/lenny_assistant
-      - PROVIDER_TYPE=ollama
-      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgrespassword}@postgres:5432/${POSTGRES_DB:-lenny_assistant}
+      - PROVIDER_TYPE=${PROVIDER_TYPE:-ollama}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma3:4b}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
     volumes:
       - ./frontend:/app/frontend
+      - ./backend:/app/backend
     depends_on:
       postgres:
         condition: service_healthy
+
 
 volumes:
   pgdata:

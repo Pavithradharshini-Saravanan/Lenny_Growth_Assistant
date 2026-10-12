@@ -1,6 +1,7 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from backend.app.config import settings
 from backend.app.db.database import get_db
 from backend.app.services.session_service import SessionService
 from backend.app.agent.dispatcher import get_agent_adapter
@@ -26,8 +27,29 @@ async def send_chat_message(request: ChatRequest, db: Session = Depends(get_db))
         )
 
     # Determine provider/model override if supplied
-    chosen_provider = request.provider or db_session.provider
-    chosen_model = request.model or db_session.model
+    chosen_provider = (request.provider or db_session.provider).lower().strip()
+    if request.model:
+        chosen_model = request.model
+    elif request.provider and request.provider != db_session.provider:
+        # Provider switched: use appropriate default model for the new provider
+        if chosen_provider in ("gemini", "google"):
+            chosen_model = settings.GEMINI_MODEL
+        elif chosen_provider == "cloud":
+            chosen_model = settings.CLOUD_MODEL
+        else:
+            chosen_model = settings.OLLAMA_MODEL
+    else:
+        # Same provider: use session model if valid for this provider, else fallback to configured default
+        if chosen_provider in ("gemini", "google"):
+            chosen_model = db_session.model if "gemini" in db_session.model.lower() else settings.GEMINI_MODEL
+        elif chosen_provider == "cloud":
+            chosen_model = db_session.model if "claude" in db_session.model.lower() else settings.CLOUD_MODEL
+        elif chosen_provider == "ollama":
+            # For ollama, keep session model if it's not a cloud model name, else use settings.OLLAMA_MODEL
+            is_cloud_name = any(k in db_session.model.lower() for k in ("gemini", "claude", "gpt"))
+            chosen_model = settings.OLLAMA_MODEL if is_cloud_name else db_session.model
+        else:
+            chosen_model = db_session.model
 
     # 2. Get history & persist user message
     user_msg_in = MessageCreate(role="user", content=request.message)

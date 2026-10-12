@@ -12,7 +12,7 @@ def test_config_endpoint(client):
     response = client.get("/api/config")
     assert response.status_code == 200
     data = response.json()
-    assert data["active_provider"] in ["ollama", "cloud"]
+    assert data["active_provider"] in ["ollama", "cloud", "gemini"]
     assert "sdk_integration" in data
     assert "supported_providers" in data
 
@@ -230,3 +230,20 @@ def test_frontend_assets_contain_keyboard_listener_and_theme():
     assert "--bg-canvas: #090A0E" in styles_css
     assert "--accent-red-primary: #DC2626" in styles_css
     assert "prefers-reduced-motion" in styles_css
+
+def test_frontend_message_formatting_cleans_markdown_asterisks():
+    """Verify that frontend/app.js formats **bold** into <strong> and cleans raw markdown asterisks."""
+    app_js = open("frontend/app.js", encoding="utf-8").read()
+    assert "function formatMessageContent" in app_js
+    assert "formatted.replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>')" in app_js
+    assert "formatted.replace(/\\*\\*/g, '')" in app_js
+    assert "formatMessageContent(content)" in app_js
+
+def test_frontend_scrollbar_hidden_in_chat():
+    """Verify that frontend/styles.css hides scrollbars across Firefox, IE/Edge, and WebKit/Blink for chat elements."""
+    styles_css = open("frontend/styles.css", encoding="utf-8").read()
+    assert "scrollbar-width: none" in styles_css
+    assert "-ms-overflow-style: none" in styles_css
+    assert ".chat-messages::-webkit-scrollbar" in styles_css
+    assert ".session-list::-webkit-scrollbar" in styles_css
+    assert "display: none" in styles_css
