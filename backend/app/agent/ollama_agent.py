@@ -27,7 +27,7 @@ class OllamaAgentAdapter(BaseAgentAdapter):
     def _check_ollama_status(self) -> tuple[bool, bool, list[str]]:
         """Check if Ollama service is reachable and if requested model is installed."""
         try:
-            req = urllib.request.urlopen(f"{self.base_url}/api/tags", timeout=3)
+            req = urllib.request.urlopen(f"{self.base_url}/api/tags", timeout=10)
             if req.status != 200:
                 return False, False, []
 

@@ -19,7 +19,7 @@ def health_check(db: Session = Depends(get_db)):
 
     ollama_alive = False
     try:
-        req = urllib.request.urlopen(f"{settings.OLLAMA_BASE_URL}/api/tags", timeout=2)
+        req = urllib.request.urlopen(f"{settings.OLLAMA_BASE_URL}/api/tags", timeout=10)
         ollama_alive = req.status == 200
     except Exception:
         ollama_alive = False
